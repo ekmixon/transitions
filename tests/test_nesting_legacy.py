@@ -53,8 +53,8 @@ class TestNestedLegacy(TestNestedTransitions):
         s = self.stuff
         s.machine.add_states([{'name': 'E', 'children': ['1', '2']}])
         s.machine.add_state('3', parent='E')
-        s.machine.add_transition('go', '*', 'E%s1' % self.state_cls.separator)
-        s.machine.add_transition('walk', '*', 'E%s3' % self.state_cls.separator)
+        s.machine.add_transition('go', '*', f'E{self.state_cls.separator}1')
+        s.machine.add_transition('walk', '*', f'E{self.state_cls.separator}3')
         s.machine.add_transition('run', 'E', 'C{0}3{0}a'.format(self.state_cls.separator))
         s.go()
         self.assertEqual('E{0}1'.format(self.state_cls.separator), s.state)
@@ -80,7 +80,10 @@ class TestNestedLegacy(TestNestedTransitions):
         s.machine.add_transition('advance', 'B', 'C')
         s.machine.add_transition('advance', 'C', 'D')
         s.machine.add_transition('reset', '*', 'A')
-        self.assertEqual(len(s.machine.events['reset'].transitions['C%s1' % State.separator]), 1)
+        self.assertEqual(
+            len(s.machine.events['reset'].transitions[f'C{State.separator}1']), 1
+        )
+
         s.advance()
         self.assertEqual(s.state, 'B')
         self.assertFalse(s.is_A())

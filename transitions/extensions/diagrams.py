@@ -273,11 +273,14 @@ class BaseGraph(object):
         if 'dest' not in tran:
             edge_label += " [internal]"
         if self.machine.show_conditions and any(prop in tran for prop in ['conditions', 'unless']):
-            x = '{edge_label} [{conditions}]'.format(
+            return '{edge_label} [{conditions}]'.format(
                 edge_label=edge_label,
-                conditions=' & '.join(tran.get('conditions', []) + ['!' + u for u in tran.get('unless', [])]),
+                conditions=' & '.join(
+                    tran.get('conditions', [])
+                    + [f'!{u}' for u in tran.get('unless', [])]
+                ),
             )
-            return x
+
         return edge_label
 
     def _get_global_name(self, path):
@@ -328,7 +331,6 @@ class BaseGraph(object):
 def _flatten(item):
     for elem in item:
         if isinstance(elem, (list, tuple, set)):
-            for res in _flatten(elem):
-                yield res
+            yield from _flatten(elem)
         else:
             yield elem

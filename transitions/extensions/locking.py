@@ -70,7 +70,6 @@ class IdentManager:
 
     def __enter__(self):
         self.current = get_ident()
-        pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.current = 0
@@ -81,14 +80,9 @@ class LockedEvent(Event):
 
     def trigger(self, model, *args, **kwargs):
         """ Extends transitions.core.Event.trigger by using locks/machine contexts. """
-        # pylint: disable=protected-access
-        # noinspection PyProtectedMember
-        # LockedMachine._locked should not be called somewhere else. That's why it should not be exposed
-        # to Machine users.
-        if self.machine._ident.current != get_ident():
-            with nested(*self.machine.model_context_map[id(model)]):
-                return _super(LockedEvent, self).trigger(model, *args, **kwargs)
-        else:
+        if self.machine._ident.current == get_ident():
+            return _super(LockedEvent, self).trigger(model, *args, **kwargs)
+        with nested(*self.machine.model_context_map[id(model)]):
             return _super(LockedEvent, self).trigger(model, *args, **kwargs)
 
 
@@ -120,7 +114,7 @@ class LockedMachine(Machine):
     # references. This should induce no restrictions compared to transitions 0.8.8 but enable the usage of unhashable
     # objects in locked machine.
     def __getstate__(self):
-        state = {k: v for k, v in self.__dict__.items()}
+        state = dict(self.__dict__.items())
         del state['model_context_map']
         state['_model_context_map_store'] = {mod: self.model_context_map[id(mod)] for mod in self.models}
         return state
@@ -191,8 +185,7 @@ class LockedMachine(Machine):
         return state.name
 
     def _locked_method(self, func, *args, **kwargs):
-        if self._ident.current != get_ident():
-            with nested(*self.machine_context):
-                return func(*args, **kwargs)
-        else:
+        if self._ident.current == get_ident():
+            return func(*args, **kwargs)
+        with nested(*self.machine_context):
             return func(*args, **kwargs)

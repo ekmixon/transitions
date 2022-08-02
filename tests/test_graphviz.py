@@ -28,18 +28,14 @@ class TestDiagrams(TestTransitions):
     use_pygraphviz = False
 
     def parse_dot(self, graph):
-        if self.use_pygraphviz:
-            dot = graph.string()
-        else:
-            dot = graph.source
+        dot = graph.string() if self.use_pygraphviz else graph.source
         nodes = []
         edges = []
         for line in dot.split('\n'):
             if '->' in line:
                 src, rest = line.split('->')
                 dst, attr = rest.split(None, 1)
-                nodes.append(src.strip().replace('"', ''))
-                nodes.append(dst)
+                nodes.extend((src.strip().replace('"', ''), dst))
                 edges.append(attr)
         return dot, set(nodes), edges
 
@@ -74,7 +70,7 @@ class TestDiagrams(TestTransitions):
 
         for e in edges:
             # label should be equivalent to the event name
-            self.assertIsNotNone(getattr(m, re.match(r'\[label=([^\]]+)\]', e).group(1)))
+            self.assertIsNotNone(getattr(m, re.match(r'\[label=([^\]]+)\]', e)[1]))
 
         # write diagram to temp file
         target = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
@@ -168,10 +164,7 @@ class TestDiagrams(TestTransitions):
         m.add_transition('reflexive', 'A', '=')
         m.add_transition('fixed', 'A', None)
         g1 = m.get_graph()
-        if self.use_pygraphviz:
-            dot_string = g1.string()
-        else:
-            dot_string = g1.source
+        dot_string = g1.string() if self.use_pygraphviz else g1.source
         try:
             self.assertRegex(dot_string, r'A\s+->\s*A\s+\[label="(fixed|reflexive)')
         except AttributeError:  # Python 2 backwards compatibility
@@ -282,8 +275,11 @@ class TestDiagramsNested(TestDiagrams):
 
         self.assertEqual(len(edges), 8)
         # Test that graph properties match the Machine
-        self.assertEqual(set(m.states.keys()) - set(['C', 'C%s1' % NestedState.separator]),
-                         set(nodes) - set(['C_anchor', 'C%s1_anchor' % NestedState.separator]))
+        self.assertEqual(
+            set(m.states.keys()) - {'C', f'C{NestedState.separator}1'},
+            set(nodes) - {'C_anchor', f'C{NestedState.separator}1_anchor'},
+        )
+
         m.walk()
         m.run()
 
@@ -390,10 +386,7 @@ class TestDiagramsNested(TestDiagrams):
         machine = CustomStateMachine(states=states, transitions=transitions, **extra_args)
         g1 = machine.get_graph()
         # dithering should have 4 'drink' edges, a) from walking, b) from initial, c) from running and d) from itself
-        if self.use_pygraphviz:
-            dot_string = g1.string()
-        else:
-            dot_string = g1.source
+        dot_string = g1.string() if self.use_pygraphviz else g1.source
         count = re.findall('-> "?caffeinated{0}dithering"?'.format(machine.state_cls.separator), dot_string)
         self.assertEqual(4, len(count))
         self.assertTrue(True)

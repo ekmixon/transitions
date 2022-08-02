@@ -182,12 +182,11 @@ class AsyncEvent(Event):
             msg = "%sCan't trigger event %s from state %s!" % (self.machine.name, self.name,
                                                                state.name)
             ignore = state.ignore_invalid_triggers if state.ignore_invalid_triggers is not None \
-                else self.machine.ignore_invalid_triggers
-            if ignore:
-                _LOGGER.warning(msg)
-                return False
-            else:
+                    else self.machine.ignore_invalid_triggers
+            if not ignore:
                 raise MachineError(msg)
+            _LOGGER.warning(msg)
+            return False
         event_data = EventData(state, self, self.machine, model, args=args, kwargs=kwargs)
         return await self._process(event_data)
 
@@ -436,14 +435,13 @@ class AsyncMachine(Machine):
             self._transition_queue.extend(new_queue)
 
     async def _process(self, trigger, model):
-        # default processing
         if not self.has_queue:
-            if not self._transition_queue:
-                # if trigger raises an Error, it has to be handled by the Machine.process caller
-                return await trigger()
-            else:
+            if self._transition_queue:
                 raise MachineError("Attempt to process events synchronously while transition queue is not empty!")
 
+            else:
+                # if trigger raises an Error, it has to be handled by the Machine.process caller
+                return await trigger()
         self._transition_queue_dict[id(model)].append(trigger)
         # another entry in the queue implies a running transition; skip immediate execution
         if len(self._transition_queue_dict[id(model)]) > 1:
@@ -505,7 +503,11 @@ class HierarchicalAsyncMachine(HierarchicalMachine, AsyncMachine):
                 tmp = await self.events[_trigger].trigger(_model, self, *args, **kwargs)
                 if tmp is not None:
                     res[key] = tmp
-        return None if not res or all([v is None for v in res.values()]) else any(res.values())
+        return (
+            None
+            if not res or all(v is None for v in res.values())
+            else any(res.values())
+        )
 
 
 class AsyncTimeout(AsyncState):

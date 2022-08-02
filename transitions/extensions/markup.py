@@ -76,10 +76,17 @@ class MarkupMachine(Machine):
         if isinstance(func, partial):
             return "%s(%s)" % (
                 func.func.__name__,
-                ", ".join(itertools.chain(
-                    (str(_) for _ in func.args),
-                    ("%s=%s" % (key, value)
-                     for key, value in iteritems(func.keywords if func.keywords else {})))))
+                ", ".join(
+                    itertools.chain(
+                        (str(_) for _ in func.args),
+                        (
+                            f"{key}={value}"
+                            for key, value in iteritems(func.keywords or {})
+                        ),
+                    )
+                ),
+            )
+
         return str(func)
 
     def _convert_states_and_transitions(self, root):
@@ -96,10 +103,7 @@ class MarkupMachine(Machine):
         root[key] = []
         for state_name, state in self.states.items():
             s_def = _convert(state, self.state_attributes, self.format_references)
-            if isinstance(state_name, Enum):
-                s_def['name'] = state_name.name
-            else:
-                s_def['name'] = state_name
+            s_def['name'] = state_name.name if isinstance(state_name, Enum) else state_name
             if getattr(state, 'states', []):
                 with self(state_name):
                     self._convert_states_and_transitions(s_def)
@@ -139,8 +143,13 @@ class MarkupMachine(Machine):
         for model in self.models:
             state = getattr(model, self.model_attribute)
             model_def = dict(state=state.name if isinstance(state, Enum) else state)
-            model_def['name'] = model.name if hasattr(model, 'name') else str(id(model))
-            model_def['class-name'] = 'self' if model == self else model.__module__ + "." + model.__class__.__name__
+            model_def['name'] = model.name if hasattr(model, 'name') else id(model)
+            model_def['class-name'] = (
+                'self'
+                if model == self
+                else f"{model.__module__}.{model.__class__.__name__}"
+            )
+
             models.append(model_def)
         return models
 
@@ -160,10 +169,10 @@ class MarkupMachine(Machine):
         return False
 
     @classmethod
-    def _identify_callback(self, name):
-        callback_type, target = super(MarkupMachine, self)._identify_callback(name)
+    def _identify_callback(cls, name):
+        callback_type, target = super(MarkupMachine, cls)._identify_callback(name)
         if callback_type:
-            self._needs_update = True
+            cls._needs_update = True
         return callback_type, target
 
 

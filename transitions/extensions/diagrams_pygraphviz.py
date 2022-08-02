@@ -56,7 +56,7 @@ class Graph(BaseGraph):
         if not pgv:  # pragma: no cover
             raise Exception('AGraph diagram requires pygraphviz')
 
-        title = '' if not title else title
+        title = title or ''
 
         self.fsm_graph = pgv.AGraph(label=title, **self.machine.machine_attributes)
         self.fsm_graph.node_attr.update(self.machine.style_attributes['node']['default'])
@@ -71,37 +71,34 @@ class Graph(BaseGraph):
     def get_graph(self, title=None):
         if title:
             self.fsm_graph.graph_attr['label'] = title
-        if self.roi_state:
-            filtered = _copy_agraph(self.fsm_graph)
-            kept_nodes = set()
-            active_state = self.roi_state.name if hasattr(self.roi_state, 'name') else self.roi_state
-            if not filtered.has_node(self.roi_state):
-                active_state += '_anchor'
-            kept_nodes.add(active_state)
-
-            # remove all edges that have no connection to the currently active state
-            for edge in filtered.edges():
-                if active_state not in edge:
-                    filtered.delete_edge(edge)
-
-            # find the ingoing edge by color; remove the rest
-            for edge in filtered.in_edges(active_state):
-                if edge.attr['color'] == self.fsm_graph.style_attributes['edge']['previous']['color']:
-                    kept_nodes.add(edge[0])
-                else:
-                    filtered.delete_edge(edge)
-
-            # remove outgoing edges from children
-            for edge in filtered.out_edges_iter(active_state):
-                kept_nodes.add(edge[1])
-
-            for node in filtered.nodes():
-                if node not in kept_nodes:
-                    filtered.delete_node(node)
-
-            return filtered
-        else:
+        if not self.roi_state:
             return self.fsm_graph
+        filtered = _copy_agraph(self.fsm_graph)
+        active_state = self.roi_state.name if hasattr(self.roi_state, 'name') else self.roi_state
+        if not filtered.has_node(self.roi_state):
+            active_state += '_anchor'
+        kept_nodes = {active_state}
+        # remove all edges that have no connection to the currently active state
+        for edge in filtered.edges():
+            if active_state not in edge:
+                filtered.delete_edge(edge)
+
+        # find the ingoing edge by color; remove the rest
+        for edge in filtered.in_edges(active_state):
+            if edge.attr['color'] == self.fsm_graph.style_attributes['edge']['previous']['color']:
+                kept_nodes.add(edge[0])
+            else:
+                filtered.delete_edge(edge)
+
+        # remove outgoing edges from children
+        for edge in filtered.out_edges_iter(active_state):
+            kept_nodes.add(edge[1])
+
+        for node in filtered.nodes():
+            if node not in kept_nodes:
+                filtered.delete_node(node)
+
+        return filtered
 
     def set_node_style(self, state, style):
         node = self.fsm_graph.get_node(state)
@@ -145,13 +142,19 @@ class NestedGraph(Graph):
             label = self._convert_state_attributes(state)
 
             if 'children' in state:
-                cluster_name = "cluster_" + name
+                cluster_name = f"cluster_{name}"
                 is_parallel = isinstance(state.get('initial', ''), list)
                 sub = container.add_subgraph(name=cluster_name, label=label, rank='source',
                                              **self.machine.style_attributes['graph'][default_style])
-                root_container = sub.add_subgraph(name=cluster_name + '_root', label='', color=None, rank='min')
+                root_container = sub.add_subgraph(
+                    name=f'{cluster_name}_root', label='', color=None, rank='min'
+                )
+
                 width = '0' if is_parallel else '0.1'
-                root_container.add_node(name + "_anchor", shape='point', fillcolor='black', width=width)
+                root_container.add_node(
+                    f"{name}_anchor", shape='point', fillcolor='black', width=width
+                )
+
                 self._add_nodes(state['children'], sub, prefix=prefix + state['name'] + NestedState.separator,
                                 default_style='parallel' if is_parallel else 'default')
             else:
@@ -168,32 +171,33 @@ class NestedGraph(Graph):
             except KeyError:
                 dst = src
             edge_attr = {}
-            if _get_subgraph(container, 'cluster_' + src) is not None:
-                edge_attr['ltail'] = 'cluster_' + src
+            if _get_subgraph(container, f'cluster_{src}') is not None:
+                edge_attr['ltail'] = f'cluster_{src}'
                 # edge_attr['minlen'] = "3"
-                src_name = src + "_anchor"
+                src_name = f"{src}_anchor"
                 label_pos = 'headlabel'
             else:
                 src_name = src
 
-            dst_graph = _get_subgraph(container, 'cluster_' + dst)
+            dst_graph = _get_subgraph(container, f'cluster_{dst}')
             if dst_graph is not None:
                 if not src.startswith(dst):
-                    edge_attr['lhead'] = "cluster_" + dst
+                    edge_attr['lhead'] = f"cluster_{dst}"
                     label_pos = 'taillabel' if label_pos.startswith('l') else 'label'
-                dst_name = dst + '_anchor'
+                dst_name = f'{dst}_anchor'
             else:
                 dst_name = dst
 
             # remove ltail when dst is a child of src
-            if 'ltail' in edge_attr:
-                if _get_subgraph(container, edge_attr['ltail']).has_node(dst_name):
-                    del edge_attr['ltail']
+            if 'ltail' in edge_attr and _get_subgraph(
+                container, edge_attr['ltail']
+            ).has_node(dst_name):
+                del edge_attr['ltail']
 
             edge_attr[label_pos] = self._transition_label(transition)
             if container.has_edge(src_name, dst_name):
                 edge = container.get_edge(src_name, dst_name)
-                edge.attr[label_pos] += ' | ' + edge_attr[label_pos]
+                edge.attr[label_pos] += f' | {edge_attr[label_pos]}'
             else:
                 container.add_edge(src_name, dst_name, **edge_attr)
 
@@ -203,7 +207,7 @@ class NestedGraph(Graph):
             style_attr = self.fsm_graph.style_attributes.get('node', {}).get(style)
             node.attr.update(style_attr)
         except KeyError:
-            subgraph = _get_subgraph(self.fsm_graph, 'cluster_' + state)
+            subgraph = _get_subgraph(self.fsm_graph, f'cluster_{state}')
             style_attr = self.fsm_graph.style_attributes.get('graph', {}).get(style)
             subgraph.graph_attr.update(style_attr)
 
@@ -216,11 +220,11 @@ class NestedGraph(Graph):
         except KeyError:
             _src = src
             _dst = dst
-            if _get_subgraph(self.fsm_graph, 'cluster_' + src):
-                edge_attr['ltail'] = 'cluster_' + src
+            if _get_subgraph(self.fsm_graph, f'cluster_{src}'):
+                edge_attr['ltail'] = f'cluster_{src}'
                 _src += '_anchor'
-            if _get_subgraph(self.fsm_graph, 'cluster_' + dst):
-                edge_attr['lhead'] = "cluster_" + dst
+            if _get_subgraph(self.fsm_graph, f'cluster_{dst}'):
+                edge_attr['lhead'] = f"cluster_{dst}"
                 _dst += '_anchor'
             try:
                 edge = self.fsm_graph.get_edge(_src, _dst)
@@ -239,12 +243,10 @@ def _get_subgraph(graph, name):
         name (str): Name of the cluster.
     Returns: AGraph if a cluster called 'name' exists else None
     """
-    sub_graph = graph.get_subgraph(name)
-    if sub_graph:
+    if sub_graph := graph.get_subgraph(name):
         return sub_graph
     for sub in graph.subgraphs_iter():
-        sub_graph = _get_subgraph(sub, name)
-        if sub_graph:
+        if sub_graph := _get_subgraph(sub, name):
             return sub_graph
     return None
 
@@ -255,11 +257,7 @@ def _copy_agraph(graph):
     from tempfile import TemporaryFile
 
     fh = TemporaryFile()
-    if hasattr(fh, "file"):
-        fhandle = fh.file
-    else:
-        fhandle = fh
-
+    fhandle = fh.file if hasattr(fh, "file") else fh
     graph.write(fhandle)
     fh.seek(0)
     res = graph.__class__(filename=fhandle)

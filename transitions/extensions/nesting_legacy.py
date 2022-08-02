@@ -98,7 +98,7 @@ class NestedState(State):
         """
 
         temp_state = self
-        while not temp_state.value == state_name and temp_state.level > 0:
+        while temp_state.value != state_name and temp_state.level > 0:
             temp_state = temp_state.parent
         return temp_state.value == state_name
 
@@ -118,7 +118,7 @@ class NestedState(State):
         elif self.level > target_state.level:
             self.exit(event_data)
             return self.parent.exit_nested(event_data, target_state)
-        elif self.level <= target_state.level:
+        else:
             tmp_state = target_state
             while self.level != tmp_state.level:
                 tmp_state = tmp_state.parent
@@ -279,10 +279,11 @@ class HierarchicalMachine(Machine):
         Returns: bool Whether the passed model is in queried state (or a substate of it) or not.
 
         """
-        if not allow_substates:
-            return getattr(model, self.model_attribute) == state_name
-
-        return self.get_model_state(model).is_substate_of(state_name)
+        return (
+            self.get_model_state(model).is_substate_of(state_name)
+            if allow_substates
+            else getattr(model, self.model_attribute) == state_name
+        )
 
     def _traverse(self, states, on_enter=None, on_exit=None,
                   ignore_invalid_triggers=None, parent=None, remap=None):
@@ -364,7 +365,7 @@ class HierarchicalMachine(Machine):
                         if path[0] in remap:
                             continue
                         ppath = parent.name.split(self.state_cls.separator)
-                        path = ['to_' + ppath[0]] + ppath[1:] + path
+                        path = [f'to_{ppath[0]}'] + ppath[1:] + path
                         trigger = '.'.join(path)
                     # (deep) copy transitions and
                     # adjust all transition start and end points to new state names
@@ -376,7 +377,7 @@ class HierarchicalMachine(Machine):
                             if src in remap:
                                 continue
                             dst = parent.name + self.state_cls.separator + transition.dest\
-                                if transition.dest not in remap else remap[transition.dest]
+                                    if transition.dest not in remap else remap[transition.dest]
                             conditions, unless = [], []
                             for cond in transition.conditions:
                                 # split a list in two lists based on the accessors (cond.target) truth value
@@ -406,8 +407,10 @@ class HierarchicalMachine(Machine):
             if new.name in duplicate_check:
                 # collect state names for the following error message
                 state_names = [s.name for s in new_states]
-                raise ValueError("State %s cannot be added since it is already in state list %s."
-                                 % (new.name, state_names))
+                raise ValueError(
+                    f"State {new.name} cannot be added since it is already in state list {state_names}."
+                )
+
             else:
                 duplicate_check.append(new.name)
         return new_states
@@ -448,12 +451,12 @@ class HierarchicalMachine(Machine):
         if trigger.startswith('to_') and self.state_cls.separator != '_':
             path = trigger[3:].split(self.state_cls.separator)
             trig_func = partial(self.events[trigger].trigger, model)
-            if hasattr(model, 'to_' + path[0]):
+            if hasattr(model, f'to_{path[0]}'):
                 # add path to existing function wrapper
-                getattr(model, 'to_' + path[0]).add(trig_func, path[1:])
+                getattr(model, f'to_{path[0]}').add(trig_func, path[1:])
             else:
                 # create a new function wrapper
-                setattr(model, 'to_' + path[0], FunctionWrapper(trig_func, path[1:]))
+                setattr(model, f'to_{path[0]}', FunctionWrapper(trig_func, path[1:]))
         else:
             _super(HierarchicalMachine, self)._add_trigger_to_model(trigger, model)  # pylint: disable=protected-access
 

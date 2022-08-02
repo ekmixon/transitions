@@ -73,7 +73,7 @@ class FunctionWrapper(object):
         if path:
             name = path[0]
             if name[0].isdigit():
-                name = 's' + name
+                name = f's{name}'
             if hasattr(self, name):
                 getattr(self, name).add(func, path[1:])
             else:
@@ -361,10 +361,7 @@ class HierarchicalMachine(Machine):
             state = self.states[to_scope.name]
             to_scope = (state, state.states, state.events)
         elif to_scope is None:
-            if self._stack:
-                to_scope = self._stack[0]
-            else:
-                to_scope = (self, self.states, self.events)
+            to_scope = self._stack[0] if self._stack else (self, self.states, self.events)
         self._next_scope = to_scope
 
         return self
@@ -491,9 +488,7 @@ class HierarchicalMachine(Machine):
                 if 'ignore_invalid_triggers' not in state:
                     state['ignore_invalid_triggers'] = ignore
 
-                # parallel: [states] is just a short handle for {children: [states], initial: [state_names]}
-                state_parallel = state.pop('parallel', [])
-                if state_parallel:
+                if state_parallel := state.pop('parallel', []):
                     state_children = state_parallel
                     state['initial'] = [s['name'] if isinstance(s, dict)
                                         else s for s in state_children]
@@ -559,7 +554,7 @@ class HierarchicalMachine(Machine):
                     self.events[ev.name] = ev
                 if self.scoped.initial is None:
                     self.scoped.initial = state.initial
-            elif isinstance(state, State) and not isinstance(state, NestedState):
+            elif isinstance(state, State):
                 raise ValueError("A passed state object must derive from NestedState! "
                                  "A default State object is not sufficient")
             else:
@@ -592,8 +587,6 @@ class HierarchicalMachine(Machine):
         local_stack = [s[0] for s in self._stack] + [self.scoped]
         local_stack_start = len(local_stack) - local_stack[::-1].index(self)
         domains = [s.name for s in local_stack[local_stack_start:]]
-        if domains and state_name and state_name[0] != domains[0]:
-            return self.state_cls.separator.join(state_name) if join else state_name
         return self.state_cls.separator.join(state_name) if join else state_name
 
     def get_nested_state_names(self):
@@ -735,7 +728,9 @@ class HierarchicalMachine(Machine):
         """
 
         state = state or self
-        return trigger in state.events or any([self.has_trigger(trigger, sta) for sta in state.states.values()])
+        return trigger in state.events or any(
+            self.has_trigger(trigger, sta) for sta in state.states.values()
+        )
 
     def is_state(self, state_name, model, allow_substates=False):
         current_name = getattr(model, self.model_attribute)
@@ -820,22 +815,28 @@ class HierarchicalMachine(Machine):
         name = self.get_global_name(state)
         if self.state_cls.separator == '_':
             value = state.value if isinstance(state.value, Enum) else name
-            self._checked_assignment(model, 'is_%s' % name, partial(self.is_state, value, model))
+            self._checked_assignment(
+                model, f'is_{name}', partial(self.is_state, value, model)
+            )
+
             # Add dynamic method callbacks (enter/exit) if there are existing bound methods in the model
             # except if they are already mentioned in 'on_enter/exit' of the defined state
             for callback in self.state_cls.dynamic_methods:
                 method = "{0}_{1}".format(callback, name)
                 if hasattr(model, method) and inspect.ismethod(getattr(model, method)) and \
-                        method not in getattr(state, callback):
+                            method not in getattr(state, callback):
                     state.add_callback(callback[3:], method)
         else:
             path = name.split(self.state_cls.separator)
             value = state.value if isinstance(state.value, Enum) else name
             trig_func = partial(self.is_state, value, model)
-            if hasattr(model, 'is_' + path[0]):
-                getattr(model, 'is_' + path[0]).add(trig_func, path[1:])
+            if hasattr(model, f'is_{path[0]}'):
+                getattr(model, f'is_{path[0]}').add(trig_func, path[1:])
             else:
-                self._checked_assignment(model, 'is_' + path[0], FunctionWrapper(trig_func, path[1:]))
+                self._checked_assignment(
+                    model, f'is_{path[0]}', FunctionWrapper(trig_func, path[1:])
+                )
+
         with self(state.name):
             for event in self.events.values():
                 if not hasattr(model, event.name):
@@ -848,12 +849,15 @@ class HierarchicalMachine(Machine):
         # FunctionWrappers are only necessary if a custom separator is used
         if trigger.startswith('to_') and self.state_cls.separator != '_':
             path = trigger[3:].split(self.state_cls.separator)
-            if hasattr(model, 'to_' + path[0]):
+            if hasattr(model, f'to_{path[0]}'):
                 # add path to existing function wrapper
-                getattr(model, 'to_' + path[0]).add(trig_func, path[1:])
+                getattr(model, f'to_{path[0]}').add(trig_func, path[1:])
             else:
                 # create a new function wrapper
-                self._checked_assignment(model, 'to_' + path[0], FunctionWrapper(trig_func, path[1:]))
+                self._checked_assignment(
+                    model, f'to_{path[0]}', FunctionWrapper(trig_func, path[1:])
+                )
+
         else:
             self._checked_assignment(model, trigger, trig_func)
 
@@ -879,8 +883,7 @@ class HierarchicalMachine(Machine):
             return prefix + [enum_state.name]
         for name in self.states:
             with self(name):
-                res = self._get_enum_path(enum_state, prefix=prefix + [name])
-                if res:
+                if res := self._get_enum_path(enum_state, prefix=prefix + [name]):
                     return res
         return []
 
@@ -889,8 +892,7 @@ class HierarchicalMachine(Machine):
             return prefix + [state.name]
         for name in self.states:
             with self(name):
-                res = self._get_state_path(state, prefix=prefix + [name])
-                if res:
+                if res := self._get_state_path(state, prefix=prefix + [name]):
                     return res
         return []
 
@@ -943,7 +945,8 @@ class HierarchicalMachine(Machine):
                     if self._has_state(state):
                         return True
         if not found and raise_error:
-            msg = 'State %s has not been added to the machine' % (state.name if hasattr(state, 'name') else state)
+            msg = f"State {state.name if hasattr(state, 'name') else state} has not been added to the machine"
+
             raise ValueError(msg)
         return found
 
@@ -956,9 +959,9 @@ class HierarchicalMachine(Machine):
             with self():
                 for a_state in self.get_nested_state_names():
                     if a_state == parent[0]:
-                        self.add_transition('to_%s' % state_name, self.wildcard_all, state_name)
+                        self.add_transition(f'to_{state_name}', self.wildcard_all, state_name)
                     elif len(parent) == 1:
-                        self.add_transition('to_%s' % a_state, state_name, a_state)
+                        self.add_transition(f'to_{a_state}', state_name, a_state)
         with self(state.name):
             for substate in self.states.values():
                 self._init_state(substate)
@@ -997,9 +1000,8 @@ class HierarchicalMachine(Machine):
     def _set_state(self, state_name):
         if isinstance(state_name, list):
             return [self._set_state(value) for value in state_name]
-        else:
-            a_state = self.get_state(state_name)
-            return a_state.value if isinstance(a_state.value, Enum) else state_name
+        a_state = self.get_state(state_name)
+        return a_state.value if isinstance(a_state.value, Enum) else state_name
 
     def _trigger_event(self, _model, _trigger, _state_tree, *args, **kwargs):
         if _state_tree is None:

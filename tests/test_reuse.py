@@ -94,11 +94,12 @@ class TestReuse(TestCase):
         new_states = ['A', 'B', {'name': 'C', 'children': counter}]
         new_transitions = [
             {'trigger': 'forward', 'source': 'A', 'dest': 'B'},
-            {'trigger': 'forward', 'source': 'B', 'dest': 'C%s1' % State.separator},
+            {'trigger': 'forward', 'source': 'B', 'dest': f'C{State.separator}1'},
             {'trigger': 'backward', 'source': 'C', 'dest': 'B'},
             {'trigger': 'backward', 'source': 'B', 'dest': 'A'},
             {'trigger': 'calc', 'source': '*', 'dest': 'C'},
         ]
+
 
         walker = self.machine_cls(states=new_states, transitions=new_transitions, before_state_change='watch',
                                   after_state_change='look_back', initial='A')
@@ -113,11 +114,11 @@ class TestReuse(TestCase):
         self.assertEqual(walker.state, 'A')
         walker.forward()
         walker.forward()
-        self.assertEqual(walker.state, 'C%s1' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}1')
         walker.increase()
-        self.assertEqual(walker.state, 'C%s2' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}2')
         walker.reset()
-        self.assertEqual(walker.state, 'C%s1' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}1')
         walker.to_A()
         self.assertEqual(walker.state, 'A')
         walker.calc()
@@ -148,11 +149,12 @@ class TestReuse(TestCase):
                       'remap': {'finished': 'A', 'X': 'A'}}]
         new_transitions = [
             {'trigger': 'forward', 'source': 'A', 'dest': 'B'},
-            {'trigger': 'forward', 'source': 'B', 'dest': 'C%s1' % State.separator},
+            {'trigger': 'forward', 'source': 'B', 'dest': f'C{State.separator}1'},
             {'trigger': 'backward', 'source': 'C', 'dest': 'B'},
             {'trigger': 'backward', 'source': 'B', 'dest': 'A'},
-            {'trigger': 'calc', 'source': '*', 'dest': 'C%s1' % State.separator},
+            {'trigger': 'calc', 'source': '*', 'dest': f'C{State.separator}1'},
         ]
+
 
         walker = self.machine_cls(states=new_states, transitions=new_transitions, before_state_change='watch',
                                   after_state_change='look_back', initial='A')
@@ -170,15 +172,15 @@ class TestReuse(TestCase):
         self.assertEqual(walker.state, 'A')
         walker.forward()
         walker.forward()
-        self.assertEqual(walker.state, 'C%s1' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}1')
         walker.increase()
-        self.assertEqual(walker.state, 'C%s2' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}2')
         walker.reset()
-        self.assertEqual(walker.state, 'C%s1' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}1')
         walker.to_A()
         self.assertEqual(walker.state, 'A')
         walker.calc()
-        self.assertEqual(walker.state, 'C%s1' % State.separator)
+        self.assertEqual(walker.state, f'C{State.separator}1')
         walker.increase()
         walker.increase()
         walker.done()
@@ -204,8 +206,9 @@ class TestReuse(TestCase):
         transitions = [
             ['collect', '*', 'collecting'],
             ['wait', '*', 'waiting'],
-            ['count', '*', 'counting%s1' % State.separator]
+            ['count', '*', f'counting{State.separator}1'],
         ]
+
 
         collector = self.stuff.machine_cls(states=states, transitions=transitions, initial='waiting')
         collector.this_passes = self.stuff.this_passes
@@ -230,9 +233,23 @@ class TestReuse(TestCase):
 
         # # same as above but with states and therefore stateless embedding
         states_remap[2]['children'] = count_states
-        transitions.append(['increase', 'counting%s1' % State.separator, 'counting%s2' % State.separator])
-        transitions.append(['increase', 'counting%s2' % State.separator, 'counting%s3' % State.separator])
-        transitions.append(['done', 'counting%s3' % State.separator, 'waiting'])
+        transitions.append(
+            [
+                'increase',
+                f'counting{State.separator}1',
+                f'counting{State.separator}2',
+            ]
+        )
+
+        transitions.append(
+            [
+                'increase',
+                f'counting{State.separator}2',
+                f'counting{State.separator}3',
+            ]
+        )
+
+        transitions.append(['done', f'counting{State.separator}3', 'waiting'])
 
         collector = self.machine_cls(states=states_remap, transitions=transitions, initial='waiting')
         collector.collect()  # collecting
@@ -243,11 +260,12 @@ class TestReuse(TestCase):
         self.assertEqual(collector.state, 'waiting')
 
         # check if counting_done was correctly omitted
-        collector.add_transition('fail', '*', 'counting%sdone' % State.separator)
+        collector.add_transition('fail', '*', f'counting{State.separator}done')
         with self.assertRaises(ValueError):
             collector.fail()
 
     def test_reuse_prepare(self):
+
         class Model:
             def __init__(self):
                 self.prepared = False
@@ -264,7 +282,7 @@ class TestReuse(TestCase):
 
         m_model = Model()
         m = self.machine_cls(m_model, states=["A", "B", {"name": "NEST", "children": ms}])
-        m_model.to('NEST%sC' % self.state_cls.separator)
+        m_model.to(f'NEST{self.state_cls.separator}C')
         m_model.go()
         self.assertTrue(m_model.prepared)
 

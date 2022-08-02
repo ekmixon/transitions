@@ -35,15 +35,13 @@ setup(
     maintainer_email='aleneum@gmail.com',
     url='http://github.com/pytransitions/transitions',
     packages=find_packages(exclude=['tests', 'test_*']),
-    package_data={'transitions': ['data/*'],
-                  'transitions.tests': ['data/*']
-                  },
+    package_data={'transitions': ['data/*'], 'transitions.tests': ['data/*']},
     include_package_data=True,
     install_requires=['six'],
     extras_require=extras_require,
     tests_require=tests_require,
     license='MIT',
-    download_url='https://github.com/pytransitions/transitions/archive/%s.tar.gz' % __version__,
+    download_url=f'https://github.com/pytransitions/transitions/archive/{__version__}.tar.gz',
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2',
@@ -56,5 +54,5 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
     ],
-    **extra_setuptools_args
+    **extra_setuptools_args,
 )

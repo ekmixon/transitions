@@ -76,7 +76,7 @@ class Graph(BaseGraph):
         if not pgv:  # pragma: no cover
             raise Exception('AGraph diagram requires graphviz')
 
-        title = self.machine.title if not title else title
+        title = title or self.machine.title
 
         fsm_graph = pgv.Digraph(name=title, node_attr=self.machine.style_attributes['node']['default'],
                                 edge_attr=self.machine.style_attributes['edge']['default'],
@@ -121,7 +121,7 @@ class Graph(BaseGraph):
         try:
             filename, ext = splitext(filename)
             format = format if format is not None else ext[1:]
-            graph.render(filename, format=format if format else 'png', cleanup=True)
+            graph.render(filename, format=format or 'png', cleanup=True)
         except (TypeError, AttributeError):
             if format is None:
                 raise ValueError("Parameter 'format' must not be None when filename is no valid file path.")
@@ -147,7 +147,7 @@ class NestedGraph(Graph):
             label = self._convert_state_attributes(state)
 
             if state.get('children', []):
-                cluster_name = "cluster_" + name
+                cluster_name = f"cluster_{name}"
                 style_name = self.custom_styles['node'][name] or default_style
                 attr = {'label': label, 'rank': 'source'}
                 attr.update(**self.machine.style_attributes['graph'][style_name])
@@ -155,9 +155,8 @@ class NestedGraph(Graph):
                     self._cluster_states.append(name)
                     is_parallel = isinstance(state.get('initial', ''), list)
                     width = '0.0' if is_parallel else '0.1'
-                    with sub.subgraph(name=cluster_name + '_root',
-                                      graph_attr={'label': '', 'color': 'None', 'rank': 'min'}) as root:
-                        root.node(name + "_anchor", shape='point', fillcolor='black', width=width)
+                    with sub.subgraph(name=f'{cluster_name}_root', graph_attr={'label': '', 'color': 'None', 'rank': 'min'}) as root:
+                        root.node(f"{name}_anchor", shape='point', fillcolor='black', width=width)
                     self._add_nodes(state['children'], sub, default_style='parallel' if is_parallel else 'default',
                                     prefix=prefix + state['name'] + self.machine.state_cls.separator)
             else:
@@ -199,17 +198,17 @@ class NestedGraph(Graph):
         label_pos = 'label'
         attr = {}
         if src in self._cluster_states:
-            attr['ltail'] = 'cluster_' + src
-            src_name = src + "_anchor"
+            attr['ltail'] = f'cluster_{src}'
+            src_name = f"{src}_anchor"
             label_pos = 'headlabel'
         else:
             src_name = src
 
         if dst in self._cluster_states:
             if not src.startswith(dst):
-                attr['lhead'] = "cluster_" + dst
+                attr['lhead'] = f"cluster_{dst}"
                 label_pos = 'taillabel' if label_pos.startswith('l') else 'label'
-            dst_name = dst + '_anchor'
+            dst_name = f'{dst}_anchor'
         else:
             dst_name = dst
 

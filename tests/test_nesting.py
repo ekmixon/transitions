@@ -110,15 +110,16 @@ class TestNestedTransitions(TestTransitions):
             {'trigger': 'walk', 'source': 'A', 'dest': 'B'},
             {'trigger': 'run', 'source': 'B', 'dest': 'C'},
             {'trigger': 'sprint', 'source': 'C', 'dest': 'D'},
-            {'trigger': 'run', 'source': 'C', 'dest': 'C%s1' % State.separator}
+            {'trigger': 'run', 'source': 'C', 'dest': f'C{State.separator}1'},
         ]
+
         m = self.stuff.machine_cls(states=states, transitions=transitions, initial='A')
         m.walk()
         self.assertEqual(m.state, 'B')
         m.run()
         self.assertEqual(m.state, 'C')
         m.run()
-        self.assertEqual(m.state, 'C%s1' % State.separator)
+        self.assertEqual(m.state, f'C{State.separator}1')
         # Define with list of lists
         transitions = [
             ['walk', 'A', 'B'],
@@ -182,11 +183,11 @@ class TestNestedTransitions(TestTransitions):
         s.machine.add_transition(
             'advance', 'A', 'B', conditions=['this_fails'])
         s.machine.add_transition('advance', 'A', 'C')
-        s.machine.add_transition('advance', 'C', 'C%s2' % State.separator)
+        s.machine.add_transition('advance', 'C', f'C{State.separator}2')
         s.advance()
         self.assertEqual(s.state, 'C')
         s.advance()
-        self.assertEqual(s.state, 'C%s2' % State.separator)
+        self.assertEqual(s.state, f'C{State.separator}2')
         self.assertFalse(s.is_C())
         self.assertTrue(s.is_C(allow_substates=True))
 
@@ -202,9 +203,9 @@ class TestNestedTransitions(TestTransitions):
         State = self.state_cls
         s = self.stuff
         s.machine.add_states([{'name': 'E', 'children': ['1', '2']}])
-        s.machine.add_state('E%s3' % State.separator)
-        s.machine.add_transition('go', '*', 'E%s1' % State.separator)
-        s.machine.add_transition('walk', '*', 'E%s3' % State.separator)
+        s.machine.add_state(f'E{State.separator}3')
+        s.machine.add_transition('go', '*', f'E{State.separator}1')
+        s.machine.add_transition('walk', '*', f'E{State.separator}3')
         s.machine.add_transition('run', 'E', 'C{0}3{0}a'.format(State.separator))
         s.go()
         self.assertEqual('E{0}1'.format(State.separator), s.state)
@@ -628,7 +629,7 @@ class TestSeparatorsBase(TestCase):
         self.assertEqual(3, s.level)
         self.assertEqual(4, s.transitions)  # enter a
         s.rise()
-        self.assertEqual('C%s1' % separator, s.state)
+        self.assertEqual(f'C{separator}1', s.state)
         self.assertEqual(2, s.level)
         self.assertEqual(7, s.transitions)  # exit a, 3; enter 1
         s.reverse()
@@ -659,23 +660,29 @@ class TestSeparatorsBase(TestCase):
     def test_state_change_listeners(self):
         State = self.state_cls
         s = self.stuff
-        s.machine.add_transition('advance', 'A', 'C%s1' % State.separator)
+        s.machine.add_transition('advance', 'A', f'C{State.separator}1')
         s.machine.add_transition('reverse', 'C', 'A')
-        s.machine.add_transition('lower', 'C%s1' % State.separator, 'C{0}3{0}a'.format(State.separator))
-        s.machine.add_transition('rise', 'C%s3' % State.separator, 'C%s1' % State.separator)
+        s.machine.add_transition(
+            'lower', f'C{State.separator}1', 'C{0}3{0}a'.format(State.separator)
+        )
+
+        s.machine.add_transition(
+            'rise', f'C{State.separator}3', f'C{State.separator}1'
+        )
+
         s.machine.add_transition('fast', 'A', 'C{0}3{0}a'.format(State.separator))
         s.machine.on_enter_C('hello_world')
         s.machine.on_exit_C('goodbye')
         s.machine.on_enter('C{0}3{0}a'.format(State.separator), 'greet')
-        s.machine.on_exit('C%s3' % State.separator, 'meet')
+        s.machine.on_exit(f'C{State.separator}3', 'meet')
         s.advance()
-        self.assertEqual(s.state, 'C%s1' % State.separator)
+        self.assertEqual(s.state, f'C{State.separator}1')
         self.assertEqual(s.message, 'Hello World!')
         s.lower()
         self.assertEqual(s.state, 'C{0}3{0}a'.format(State.separator))
         self.assertEqual(s.message, 'Hi')
         s.rise()
-        self.assertEqual(s.state, 'C%s1' % State.separator)
+        self.assertEqual(s.state, f'C{State.separator}1')
         self.assertTrue(s.message.startswith('Nice to'))
         s.reverse()
         self.assertEqual(s.state, 'A')
@@ -731,10 +738,7 @@ class TestSeparatorsBase(TestCase):
                                              {'name': '3', 'children': ['a', 'b', 'c']}]
                    }]
 
-        transitions = [
-            ['reset', 'C', 'A'],
-            ['reset', 'C%s2' % separator, 'C']  # overwriting parent reset
-        ]
+        transitions = [['reset', 'C', 'A'], ['reset', f'C{separator}2', 'C']]
 
         # we rely on auto transitions
         machine = self.stuff.machine_cls(states=states, transitions=transitions, initial='A')
